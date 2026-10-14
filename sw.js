@@ -1,6 +1,6 @@
 /* Daywell offline support. Network-first navigation keeps updates fresh. */
-const CACHE = 'daywell-offline-v3';
-const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'daywell-offline-v4';
+const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg', './cloud-sync.js', './firebase-config.js'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));
 });
