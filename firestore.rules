@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{kind}/{entryId} {
+      allow read: if request.auth != null && request.auth.uid == userId
+        && kind in ['foods', 'exercises', 'journals', 'profile'];
+      allow create, update: if request.auth != null && request.auth.uid == userId
+        && kind in ['foods', 'exercises', 'journals', 'profile']
+        && request.resource.data.keys().hasOnly(['payload', 'updatedAt']);
+      allow delete: if request.auth != null && request.auth.uid == userId
+        && kind in ['foods', 'exercises', 'journals', 'profile'];
+    }
+  }
+}
