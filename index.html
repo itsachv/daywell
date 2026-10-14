@@ -38,7 +38,7 @@
       <button type="button" data-page="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M10 2h4l1 3 3 1 3-1 2 4-2 2v3l2 2-2 4-3-1-3 1-1 3h-4l-1-3-3-1-3 1-2-4 2-2v-3l-2-2 2-4 3 1 3-1z"/></svg>Goals & backup</button>
     </nav>
     <div class="side-note"><div class="tiny">🌱</div><strong>Progress, not perfection.</strong><p>A gentle place to understand your routine, nourish your body, and notice how you feel.</p></div>
-    <div class="side-footer">Private on this device • v1.0</div>
+    <div class="side-footer">Cloud-ready • v2.0</div>
   </aside>
   <main class="main">
     <div class="topline">
@@ -100,6 +100,7 @@
     </section>
     <section id="settings" class="view">
       <div class="section-intro"><div><h2>Personal goals & data</h2><p>Make this tracker yours. All nutrition targets are optional.</p></div></div>
+      <div class="card" style="margin-bottom:20px"><div class="panel-title"><div><h2>☁ Cloud backup</h2><p>Sign in for automatic account-specific backup</p></div><span class="chip" id="cloud-state">Setup required</span></div><p id="cloud-description" class="section-note" role="status" aria-live="polite">Not yet configured. Your data is currently saved locally.</p><div class="row-actions"><button id="cloud-login" class="btn btn-primary" type="button" disabled>Sign in with Google</button><button id="cloud-logout" class="btn btn-soft" type="button" hidden>Sign out</button><button id="cloud-import" class="btn btn-soft" type="button" hidden>Import guest entries</button></div><p class="little-caption">Wait for a cloud-synced confirmation before relying on online backup. Continue exporting JSON backups.</p></div>
       <div class="two-col">
         <div class="card"><div class="panel-title"><div><h2>Your profile</h2><p>Fields that match your original nutrition spreadsheet</p></div></div>
           <form id="profile-form"><div class="form-grid"><label class="field"><span>Age (years)</span><input id="p-age" type="number" min="1" max="120" step="1" placeholder="17"></label><label class="field"><span>Weight (kg)</span><input id="p-weight" type="number" min="1" max="500" step="0.1" placeholder="63"></label><label class="field"><span>Height (cm)</span><input id="p-height" type="number" min="40" max="250" step="0.1" placeholder="170"></label><label class="field"><span>Activity factor</span><select id="p-factor"><option value="1.2">1.20 — Mainly seated</option><option value="1.375">1.375 — Light activity</option><option value="1.55">1.55 — Moderate activity</option><option value="1.725">1.725 — High activity</option><option value="1.9">1.90 — Very high activity</option></select></label><label class="field"><span>Protein (%)</span><input id="p-protein" type="number" min="0" max="100" step="1" placeholder="25"></label><label class="field"><span>Carbs (%)</span><input id="p-carb" type="number" min="0" max="100" step="1" placeholder="50"></label><label class="field"><span>Fat (%)</span><input id="p-fat" type="number" min="0" max="100" step="1" placeholder="25"></label><label class="field"><span>Caloric buffer (kcal)</span><input id="p-buffer" type="number" min="-1000" max="2000" step="10" placeholder="0"></label><label class="field"><span>BMR (kcal/day, manual)</span><input id="p-bmr" type="number" min="1" max="10000" step="1" placeholder="Enter if known"></label><label class="field"><span>Exercise adjustment</span><select id="p-exercise-credit"><option value="0">Off — record only</option><option value="0.5">Add 50% of estimated activity energy</option><option value="1">Add 100% of estimated activity energy</option></select></label></div><div class="row-actions"><button type="submit" class="btn btn-primary">Save preferences</button></div></form>
@@ -119,6 +120,7 @@
 <script>
 (function(){'use strict';
   const STORE='daywell-tracker-v1';
+  let storageKey=STORE;
   const el=id=>document.getElementById(id), val=id=>el(id).value, fmt=n=>Math.round(Number(n)||0).toLocaleString('en-US'), one=n=>(Math.round((Number(n)||0)*10)/10).toLocaleString('en-US',{maximumFractionDigits:1});
   const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const num=x=>Number.isFinite(Number(x))?Math.max(0,Number(x)):0;
@@ -128,7 +130,17 @@
   const defaultData=()=>({version:1,profile:{age:'',weight:'',height:'',activityFactor:'1.55',proteinPct:'25',carbPct:'50',fatPct:'25',buffer:'',bmr:'',exerciseCredit:'0'},foods:[],exercises:[],journals:{}});
   let data=defaultData(),selectedDate=localDate(),activePage='dashboard',range=7,editFoodId=null,editExerciseId=null,toastTimer;
   try{const raw=localStorage.getItem(STORE);if(raw){const v=JSON.parse(raw);if(v&&Array.isArray(v.foods)&&Array.isArray(v.exercises)&&v.journals&&typeof v.journals==='object'){data={...defaultData(),...v,profile:{...defaultData().profile,...v.profile}}}}}catch(e){console.warn('Storage unavailable:',e)}
-  function persist(){try{localStorage.setItem(STORE,JSON.stringify(data));return true}catch(e){notify('Storage could not save — export a backup.');return false}}
+  function saveLocal(){try{localStorage.setItem(storageKey,JSON.stringify(data));return true}catch(e){notify('Storage error — export a backup.');return false}}
+  function persist(){const ok=saveLocal();if(ok)window.DaywellCloudSync?.changed?.(JSON.parse(JSON.stringify(data)));return ok}
+  function loadFor(key){try{const v=JSON.parse(localStorage.getItem(key)||'null');return v&&Array.isArray(v.foods)&&Array.isArray(v.exercises)&&v.journals&&v.profile?{...defaultData(),...v,profile:{...defaultData().profile,...v.profile}}:defaultData()}catch{return defaultData()}}
+  window.DaywellBridge={
+    snapshot:()=>JSON.parse(JSON.stringify(data)),
+    guest:()=>loadFor(STORE),
+    enterAccount(uid){storageKey='daywell-user-'+uid;data=loadFor(storageKey);render()},
+    leaveAccount(){storageKey=STORE;data=loadFor(STORE);render()},
+    applyPart(kind,value){if(kind==='profile')data.profile={...defaultData().profile,...value};else data[kind]=value;saveLocal();render()},
+    mergeGuest(){const guest=loadFor(STORE);const merge=(a,b)=>[...new Map([...a,...b].map(x=>[x.id,x])).values()];data.foods=merge(data.foods,guest.foods);data.exercises=merge(data.exercises,guest.exercises);data.journals={...guest.journals,...data.journals};persist();render()}
+  };
   function notify(s){const n=el('toast');n.textContent=s;n.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>n.classList.remove('show'),3100)}
   const uid=()=>typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2);
   const foodsOn=(date=selectedDate)=>data.foods.filter(x=>x.date===date);
@@ -188,5 +200,6 @@
   if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();
 </script>
+<script type="module" src="./cloud-sync.js"></script>
 </body>
 </html>
